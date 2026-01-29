@@ -1,9 +1,9 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/eli-rich/goc4/src/board"
@@ -22,17 +22,9 @@ func main() {
 	b := &board.Board{}
 	if len(os.Args) > 1 {
 		b.Init(1)
-		seconds := flag.Float64("s", 10.0, "seconds to think (roughly)")
-		printPos := flag.Bool("print-pos", false, "simply print resulting position from load")
-
-		flag.Parse()
-
-		b.Load(flag.Args()[0])
-		if *printPos {
-			board.Print(b)
-			os.Exit(0)
-		}
-		cmove := engine.Root(b, *seconds)
+		depth, _ := strconv.Atoi(os.Args[1])
+		b.Load(os.Args[2])
+		cmove := engine.Root(b, float64(depth))
 		fmt.Println(string(util.ConvertColBack(int(cmove))))
 		os.Exit(0)
 	}

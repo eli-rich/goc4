@@ -8,15 +8,17 @@ const (
 )
 
 type Entry struct {
-	Hash      uint64
-	Value     int16
-	Depth     uint8
-	EntryType uint8
+	Hash       uint64
+	Value      int16
+	Depth      uint8
+	EntryType  uint8
+	Generation uint8
 }
 
 type Table struct {
-	Entries []Entry
-	Mask    uint64
+	Entries    []Entry
+	Mask       uint64
+	Generation uint8
 }
 
 func NewTable(length uint64) *Table {
@@ -24,7 +26,8 @@ func NewTable(length uint64) *Table {
 		panic("Table length must be a power of 2 (e.g., 1024, 2048...)")
 	}
 	return &Table{
-		Entries: make([]Entry, length),
-		Mask:    length - 1,
+		Entries:    make([]Entry, length),
+		Mask:       length - 1,
+		Generation: 0,
 	}
 }

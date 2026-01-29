@@ -9,7 +9,7 @@ import (
 	"github.com/eli-rich/goc4/src/util"
 )
 
-var table = cache.NewTable(1073741824)
+var table = cache.NewTable(134217728) // 2^27 === 2GB RAM (Assuming 16 bytes per entry)
 var nodes uint64 = 0
 
 // Use a Score large enough to distinguish ply, but small enough to not overflow int
@@ -22,7 +22,10 @@ func Root(b *board.Board, seconds float64) board.Column {
 	start := time.Now()
 	nodes = 0
 
-	for depth := 1; depth <= maxDepth; depth++ {
+	// invalidate stale entries
+	table.Generation++
+
+	for depth := 8; depth <= maxDepth; depth++ {
 		if time.Since(start).Seconds() > seconds {
 			break
 		}
@@ -89,11 +92,22 @@ func negamax(b *board.Board, depth, alpha, beta, ply int) int {
 	alphaOrig := alpha
 	nodes++
 
+	if board.CheckAlign(b.Bitboards[b.Turn^1]) {
+		return -WIN_SCORE + ply // lost position
+	}
+
 	// Transposition table read
 	idx := b.Hash & table.Mask
 	entry := table.Entries[idx]
-	if entry.Hash == b.Hash && entry.Depth >= uint8(depth) {
+	if entry.Hash == b.Hash && entry.Depth >= uint8(depth) && entry.Generation == table.Generation {
 		score := int(entry.Value)
+
+		if score > WIN_SCORE-1000 {
+			score = score - ply
+		} else if score < -WIN_SCORE+1000 {
+			score = score + ply
+		}
+
 		if entry.EntryType == cache.Exact {
 			return score
 		}
@@ -159,13 +173,22 @@ func negamax(b *board.Board, depth, alpha, beta, ply int) int {
 		typeToStore = cache.Exact
 	}
 
+	storeScore := bestScore
+	if bestScore > WIN_SCORE-1000 {
+		storeScore = bestScore + ply
+	} else if bestScore < -WIN_SCORE+1000 {
+		storeScore = bestScore - ply
+	}
+
 	idx = b.Hash & table.Mask
-	if int(entry.Depth) <= depth { // Only overwrite if we have a deeper/better search
+	entry = table.Entries[idx]
+	if entry.Hash != b.Hash || int(entry.Depth) <= depth { // Only overwrite if we have a deeper/better search
 		table.Entries[idx] = cache.Entry{
-			Hash:      b.Hash,
-			Value:     int16(bestScore),
-			Depth:     uint8(depth),
-			EntryType: typeToStore,
+			Hash:       b.Hash,
+			Value:      int16(storeScore),
+			Depth:      uint8(depth),
+			EntryType:  typeToStore,
+			Generation: table.Generation,
 		}
 	}
 	return bestScore
