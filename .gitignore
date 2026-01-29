@@ -4,6 +4,8 @@ connect4
 c4.prof
 logs
 c4golin
+.DS_Store
+coverage.out
 
 node_modules
 # output
@@ -30,4 +32,3 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 # Finder (MacOS) folder config
-.DS_Store

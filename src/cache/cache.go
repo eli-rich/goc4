@@ -1,22 +1,30 @@
 package cache
 
-const NoEntry int8 = 0
-const Alpha int8 = 1
-const Beta int8 = 2
-const Exact int8 = 3
+const (
+	NoEntry uint8 = iota
+	Alpha
+	Beta
+	Exact
+)
 
 type Entry struct {
-	Value     int8
 	Hash      uint64
-	Depth     int8
-	EntryType int8
+	Value     int16
+	Depth     uint8
+	EntryType uint8
 }
 
 type Table struct {
 	Entries []Entry
-	Length  uint64
+	Mask    uint64
 }
 
 func NewTable(length uint64) *Table {
-	return &Table{Length: length, Entries: make([]Entry, length)}
+	if length&(length-1) != 0 {
+		panic("Table length must be a power of 2 (e.g., 1024, 2048...)")
+	}
+	return &Table{
+		Entries: make([]Entry, length),
+		Mask:    length - 1,
+	}
 }

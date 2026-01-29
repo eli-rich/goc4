@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/eli-rich/goc4/src/board"
@@ -12,54 +12,65 @@ import (
 )
 
 type Options struct {
-	first bool
-	depth int
+	first   bool
+	seconds int
 }
 
 func main() {
-	b := board.Board{Bitboards: [2]board.Bitboard{0, 0}, Turn: 1, Hash: 0}
+	board.GenerateMasks()
+
+	b := &board.Board{}
 	if len(os.Args) > 1 {
-		depth, _ := strconv.Atoi(os.Args[1])
-		b.Load(os.Args[2])
-		cmove := engine.Root(b, float64(depth))
+		b.Init(1)
+		seconds := flag.Float64("s", 10.0, "seconds to think (roughly)")
+		printPos := flag.Bool("print-pos", false, "simply print resulting position from load")
+
+		flag.Parse()
+
+		b.Load(flag.Args()[0])
+		if *printPos {
+			board.Print(b)
+			os.Exit(0)
+		}
+		cmove := engine.Root(b, *seconds)
 		fmt.Println(string(util.ConvertColBack(int(cmove))))
 		os.Exit(0)
 	}
-	options := Options{first: true, depth: 12}
+	options := Options{first: true, seconds: 12}
 	fmt.Println("Welcome to Connect 4!")
 	fmt.Println("Enter a move in the form of a letter (A-G) to place a piece in that column.")
 	fmt.Println("The first player to get 4 pieces in a row wins!")
 	fmt.Println()
 	gofirstInput := ask("Would you like to go first? (Y/N): ")
 	gofirstInput = strings.ToUpper(gofirstInput)
-	if gofirstInput == "Y" {
+	switch gofirstInput {
+	case "Y":
 		options.first = true
-	} else if gofirstInput == "N" {
+	case "N":
 		options.first = false
 	}
 	fmt.Print("Enter a search time. The computer will use ABOUT this many seconds. Recommended: (5-20): ")
-	fmt.Scanf("%d", &options.depth)
+	fmt.Scanf("%d", &options.seconds)
 	gameLoop(b, options)
 }
 
-func gameLoop(b board.Board, options Options) {
+func gameLoop(b *board.Board, options Options) {
 	if !options.first {
+		b.Init(1)
 		cmove := byte('d')
 		b.Move(board.Column(util.ConvertCol(cmove)))
-		fmt.Printf("Computer move: %c\n", cmove)
+		fmt.Printf("Computer move: %c\n", rune(cmove))
+	} else {
+		b.Init(0)
 	}
 	for {
 		board.Print(b)
 		move := getMoveInput()
-		tryMove := b.Move(board.Column(util.ConvertCol(move)))
-		if !tryMove {
-			fmt.Println("Invalid move. Try again.")
-			continue
-		}
+		b.Move(board.Column(util.ConvertCol(move)))
 		checkGameOver(b, options)
-		cmove := engine.Root(b, float64(options.depth))
+		cmove := engine.Root(b, float64(options.seconds))
 		b.Move(cmove)
-		fmt.Printf("Computer move: %c\n", cmove)
+		fmt.Printf("Computer move: %c\n", rune(util.ConvertColBack(int(cmove))))
 		checkGameOver(b, options)
 	}
 }
@@ -77,8 +88,8 @@ func ask(question string) string {
 	return input
 }
 
-func checkGameOver(b board.Board, options Options) {
-	var winner int8 = engine.Check_winner(b)
+func checkGameOver(b *board.Board, options Options) {
+	var winner int8 = engine.CheckWinner(b)
 	if board.CheckDraw(b) {
 		winner = 2
 	}
