@@ -1,6 +1,6 @@
 module github.com/eli-rich/goc4
 
-go 1.19
+go 1.25
 
 require github.com/fatih/color v1.13.0
 

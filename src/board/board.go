@@ -2,9 +2,7 @@ package board
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
-	"sort"
 
 	"github.com/eli-rich/goc4/src/util"
 	"github.com/fatih/color"
@@ -37,13 +35,23 @@ type Board struct {
 	Bitboards [2]Bitboard
 	Turn      int8
 	Hash      uint64
+	Heights   [7]int8
+	Ceilings  [7]int8
+}
+
+func (b *Board) Init(turn int8) {
+	b.Bitboards = [2]Bitboard{0, 0}
+	b.Turn = 1
+	b.Hash = 0
+	b.Heights = [7]int8{0, 7, 14, 21, 28, 35, 42}
+	b.Ceilings = [7]int8{6, 13, 20, 27, 34, 41, 48}
 }
 
 // init a zobrist hash table
-func InitZobrist() [42][2]uint64 {
-	var zobrist [42][2]uint64
-	for i := 0; i < 42; i++ {
-		for j := 0; j < 2; j++ {
+func InitZobrist() [49][2]uint64 {
+	var zobrist [49][2]uint64
+	for i := range 49 { // Loop to < 49
+		for j := range 2 {
 			zobrist[i][j] = uint64(rand.Int63())
 		}
 	}
@@ -52,44 +60,28 @@ func InitZobrist() [42][2]uint64 {
 
 var zobrist = InitZobrist()
 
-func (b *Board) Set(pos Position, player int8) {
-	b.Bitboards[player] |= 1 << pos
-}
-
-func (b *Board) Unset(pos Position) {
-	b.Bitboards[0] &= ^(1 << pos)
-	b.Bitboards[1] &= ^(1 << pos)
-}
-
 func (b *Board) Get(pos Position, player int8) bool {
 	return b.Bitboards[player]&(1<<pos) != 0
 }
 
-func (b *Board) Lowest(col Column) Position {
-	bb := b.Bitboards[0] | b.Bitboards[1]
-	start := 42 - (7 - col)
-	for i := start; i >= 0; i -= 7 {
-		if bb&(1<<i) == 0 {
-			return Position(i)
-		}
-	}
-	return -1
+func (b *Board) Undo(col Column) {
+	b.Turn ^= 1
+
+	b.Heights[col] -= 1
+	pos := b.Heights[col]
+
+	b.Bitboards[b.Turn] &= ^(1 << pos)
+	b.Hash ^= zobrist[pos][b.Turn]
 }
 
-func (b *Board) Undo(col Column) bool {
-	colPos := b.Lowest(col) + 7
-	b.Unset(colPos)
-	b.Turn ^= 1
-	b.Hash ^= zobrist[int(colPos)][b.Turn]
-	return true
-}
+func (b *Board) Move(col Column) {
+	pos := b.Heights[col]
+	b.Bitboards[b.Turn] |= (1 << pos)
 
-func (b *Board) Move(col Column) bool {
-	lowestPosOfCol := b.Lowest(col)
-	b.Set(lowestPosOfCol, b.Turn)
+	b.Hash ^= zobrist[pos][b.Turn]
+	b.Heights[col] += 1
+
 	b.Turn ^= 1
-	b.Hash ^= zobrist[int(lowestPosOfCol)][b.Turn]
-	return true
 }
 
 func (b *Board) Load(s string) {
@@ -104,45 +96,39 @@ func (b *Board) Reset() {
 	b.Turn = 1
 }
 
-func GetMoves(b Board) []Column {
-	var moves = make([]Column, 0, 7)
-	for i := 0; i < 7; i++ {
-		if b.Lowest(Column(i)) >= 0 {
-			moves = append(moves, Column(i))
+func GetMoves(b *Board) []Column {
+	moves := make([]Column, 0, 7)
+	// order center out with bias towards LHS
+	columns := []Column{3, 2, 4, 1, 5, 0, 6}
+	for _, col := range columns {
+		if b.Heights[col] < b.Ceilings[col] {
+			moves = append(moves, col)
 		}
 	}
-	sort.Slice(moves, func(i, j int) bool {
-		move1 := float64(moves[i])
-		move2 := float64(moves[j])
-		center := float64(3)
-		return math.Abs(center-move1) < math.Abs(center-move2)
-	})
 	return moves
 }
 
-func Print(b Board) bool {
+func Print(b *Board) {
 	cp := color.New(color.FgHiMagenta).PrintfFunc()
 	co := color.New(color.FgHiYellow).PrintfFunc()
-	for i := 0; i < 42; i++ {
-		if i%7 == 0 {
-			if i != 0 {
-				fmt.Printf("|")
-			}
-			fmt.Printf("\n|%d|: ", 6-(i/6+1)+1)
-		}
-		if b.Get(Position(i), 1) {
-			fmt.Printf("|")
-			cp("X")
 
-		} else if b.Get(Position(i), 0) {
+	for r := 5; r >= 0; r-- {
+		fmt.Printf("\n|%d|: ", r+1)
+
+		for c := range 7 {
+			pos := Position(c*7 + r)
+
 			fmt.Printf("|")
-			co("O")
-		} else {
-			fmt.Printf("| ")
+			if b.Get(pos, 1) {
+				cp("X")
+			} else if b.Get(pos, 0) {
+				co("O")
+			} else {
+				fmt.Printf(" ")
+			}
 		}
+		fmt.Printf("|")
 	}
-	fmt.Printf("|\n")
-	fmt.Printf("     ---------------\n")
+	fmt.Printf("\n     ---------------\n")
 	fmt.Printf("     |A|B|C|D|E|F|G|\n\n")
-	return true
 }
