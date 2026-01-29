@@ -9,7 +9,7 @@ import (
 	"github.com/eli-rich/goc4/src/util"
 )
 
-var table = cache.NewTable(134217728) // 2^27 === 2GB RAM (Assuming 16 bytes per entry)
+var table = cache.NewTable(33554432) // 2^25 === 416MB RAM (Assuming 16 bytes per entry)
 var nodes uint64 = 0
 
 // Use a Score large enough to distinguish ply, but small enough to not overflow int
