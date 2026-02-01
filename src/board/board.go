@@ -23,20 +23,20 @@ const (
 // 1: Occupied
 // 0: Empty
 
+var ceilings [7]uint8 = [7]uint8{6, 13, 20, 27, 34, 41, 48}
+
 type Board struct {
 	Bitboards [2]Bitboard
 	Turn      int8
 	Hash      uint64
-	Heights   [7]int8
-	Ceilings  [7]int8
+	Heights   [7]uint8
 }
 
 func (b *Board) Init(turn int8) {
 	b.Bitboards = [2]Bitboard{0, 0}
 	b.Turn = 1
 	b.Hash = 0
-	b.Heights = [7]int8{0, 7, 14, 21, 28, 35, 42}
-	b.Ceilings = [7]int8{6, 13, 20, 27, 34, 41, 48}
+	b.Heights = [7]uint8{0, 7, 14, 21, 28, 35, 42}
 }
 
 // init a zobrist hash table
@@ -93,7 +93,7 @@ func GetMoves(b *Board) []uint8 {
 	// order center out with bias towards LHS
 	columns := []uint8{3, 2, 4, 1, 5, 0, 6}
 	for _, col := range columns {
-		if b.Heights[col] < b.Ceilings[col] {
+		if b.Heights[col] < ceilings[col] {
 			moves = append(moves, col)
 		}
 	}
