@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/eli-rich/goc4/src/board"
@@ -9,32 +10,42 @@ import (
 	"github.com/eli-rich/goc4/src/util"
 )
 
-var table = cache.NewTable(33554432) // 2^25 === 416MB RAM (Assuming 16 bytes per entry)
-var nodes uint64 = 0
+var DEBUG bool = os.Getenv("GOC4_DEBUG") == "1"
+
+type SearchContext struct {
+	Table      *cache.Table
+	Nodes      *uint64
+	StartTime  time.Time
+	TimeLimit  float64
+	DepthLimit uint8
+}
+
+// var table = cache.NewTable(33554432) // 2^25 === 416MB RAM (Assuming 16 bytes per entry)
+// var nodes uint64 = 0
 
 // Use a Score large enough to distinguish ply, but small enough to not overflow int
-const WIN_SCORE int = 10000
+const WIN_SCORE int16 = 10000
+const maxDepth uint8 = 43 // board filled
 
-func Root(b *board.Board, seconds float64) board.Column {
-	const maxDepth int = 43
-	var bestMove board.Column
+func Root(b *board.Board, ctx *SearchContext) uint8 {
+	var bestMove uint8
 
-	start := time.Now()
-	nodes = 0
+	ctx.StartTime = time.Now()
+	*ctx.Nodes = 0
 
 	// invalidate stale entries
-	table.Generation++
+	ctx.Table.Generation++
 
-	for depth := 8; depth <= maxDepth; depth++ {
-		if time.Since(start).Seconds() > seconds {
+	for depth := uint8(8); depth <= maxDepth; depth++ {
+		if ctx.DepthLimit > 0 && depth > ctx.DepthLimit {
 			break
 		}
 
-		move, score, completed := RootSearch(b, depth, start, seconds)
+		move, score, completed := RootSearch(b, ctx, depth)
 
 		if completed {
 			bestMove = move
-			fmt.Printf("Depth: %d, Move: %s, Score: %d, Nodes: %d\n", depth, string(util.ConvertColBack(int(move))), score, nodes)
+			fmt.Printf("Depth: %d, Move: %s, Score: %d, Nodes: %d\n", depth, string(util.ConvertColBack(int(move))), score, *ctx.Nodes)
 
 			if score > WIN_SCORE-100 {
 				break
@@ -44,25 +55,25 @@ func Root(b *board.Board, seconds float64) board.Column {
 		}
 	}
 
-	fmt.Printf("Total Nodes: %d\n", nodes)
-	fmt.Printf("Time: %.2fs\n", time.Since(start).Seconds())
+	fmt.Printf("Total Nodes: %d\n", *ctx.Nodes)
+	fmt.Printf("Time: %.2fs\n", time.Since(ctx.StartTime).Seconds())
 	return bestMove
 }
 
-func RootSearch(b *board.Board, depth int, start time.Time, seconds float64) (board.Column, int, bool) {
-	ply := 0
+func RootSearch(b *board.Board, ctx *SearchContext, depth uint8) (uint8, int16, bool) {
+	ply := uint8(0)
 	moves := board.GetMoves(b)
 
 	// Init Alpha/Beta to Infinity
 	alpha := -WIN_SCORE * 2
 	beta := WIN_SCORE * 2
 
-	var bestMove board.Column
+	var bestMove uint8
 	bestScore := -WIN_SCORE * 2
 
 	for _, move := range moves {
-		if time.Since(start).Seconds() > seconds {
-			return bestMove, bestScore, false
+		if ctx.TimeLimit > 0 && time.Since(ctx.StartTime).Seconds() > ctx.TimeLimit {
+			return bestMove, bestScore, false // did finish = false
 		}
 
 		b.Move(move)
@@ -70,10 +81,10 @@ func RootSearch(b *board.Board, depth int, start time.Time, seconds float64) (bo
 		// Take easy wins immediately
 		if board.CheckAlign(b.Bitboards[b.Turn^1]) {
 			b.Undo(move)
-			return move, WIN_SCORE, true
+			return move, WIN_SCORE, true // did finish = true
 		}
 
-		score := -negamax(b, depth-1, -beta, -alpha, ply+1)
+		score := -negamax(b, ctx, depth-1, ply+1, -beta, -alpha)
 		b.Undo(move)
 
 		if score > bestScore {
@@ -85,27 +96,27 @@ func RootSearch(b *board.Board, depth int, start time.Time, seconds float64) (bo
 			alpha = bestScore
 		}
 	}
-	return bestMove, bestScore, true
+	return bestMove, bestScore, true // did finish = true
 }
 
-func negamax(b *board.Board, depth, alpha, beta, ply int) int {
+func negamax(b *board.Board, ctx *SearchContext, depth, ply uint8, alpha, beta int16) int16 {
 	alphaOrig := alpha
-	nodes++
+	*ctx.Nodes++
 
 	if board.CheckAlign(b.Bitboards[b.Turn^1]) {
-		return -WIN_SCORE + ply // lost position
+		return -WIN_SCORE + int16(ply) // lost position
 	}
 
 	// Transposition table read
-	idx := b.Hash & table.Mask
-	entry := table.Entries[idx]
-	if entry.Hash == b.Hash && entry.Depth >= uint8(depth) && entry.Generation == table.Generation {
-		score := int(entry.Value)
+	idx := b.Hash & ctx.Table.Mask
+	entry := ctx.Table.Entries[idx]
+	if entry.Hash == b.Hash && entry.Depth >= uint8(depth) && entry.Generation == ctx.Table.Generation {
+		score := entry.Value
 
 		if score > WIN_SCORE-1000 {
-			score = score - ply
+			score = score - int16(ply)
 		} else if score < -WIN_SCORE+1000 {
-			score = score + ply
+			score = score + int16(ply)
 		}
 
 		if entry.EntryType == cache.Exact {
@@ -142,12 +153,12 @@ func negamax(b *board.Board, depth, alpha, beta, ply int) int {
 
 		// b.Turn is now opponent. So check b.Turn^1.
 		if board.CheckAlign(b.Bitboards[b.Turn^1]) {
-			score := WIN_SCORE - ply // Prefer shorter wins
+			score := WIN_SCORE - int16(ply) // Prefer shorter wins
 			b.Undo(move)
 			return score
 		}
 
-		score := -negamax(b, depth-1, -beta, -alpha, ply+1)
+		score := -negamax(b, ctx, depth-1, ply+1, -beta, -alpha)
 
 		b.Undo(move)
 
@@ -175,20 +186,20 @@ func negamax(b *board.Board, depth, alpha, beta, ply int) int {
 
 	storeScore := bestScore
 	if bestScore > WIN_SCORE-1000 {
-		storeScore = bestScore + ply
+		storeScore = bestScore + int16(ply)
 	} else if bestScore < -WIN_SCORE+1000 {
-		storeScore = bestScore - ply
+		storeScore = bestScore - int16(ply)
 	}
 
-	idx = b.Hash & table.Mask
-	entry = table.Entries[idx]
-	if entry.Hash != b.Hash || int(entry.Depth) <= depth { // Only overwrite if we have a deeper/better search
-		table.Entries[idx] = cache.Entry{
+	idx = b.Hash & ctx.Table.Mask
+	entry = ctx.Table.Entries[idx]
+	if entry.Hash != b.Hash || entry.Depth <= depth { // Only overwrite if we have a deeper/better search
+		ctx.Table.Entries[idx] = cache.Entry{
 			Hash:       b.Hash,
 			Value:      int16(storeScore),
 			Depth:      uint8(depth),
 			EntryType:  typeToStore,
-			Generation: table.Generation,
+			Generation: ctx.Table.Generation,
 		}
 	}
 	return bestScore

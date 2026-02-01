@@ -4,7 +4,7 @@ import (
 	"github.com/eli-rich/goc4/src/board"
 )
 
-func Eval(b *board.Board) int {
+func Eval(b *board.Board) int16 {
 
 	pboard := b.Bitboards[b.Turn]
 	oboard := b.Bitboards[b.Turn^1]
@@ -12,7 +12,7 @@ func Eval(b *board.Board) int {
 	playerRemain := board.WinsRemaining(oboard)
 	oppRemain := board.WinsRemaining(pboard)
 
-	return int(playerRemain - oppRemain)
+	return int16(playerRemain - oppRemain)
 }
 
 func CheckWinner(b *board.Board) int8 {

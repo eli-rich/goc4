@@ -10,14 +10,6 @@ import (
 
 type Bitboard uint64
 
-type SquareCol = byte
-type SquareRow = byte
-type Square = [2]byte
-
-type Position int8
-type Column int8
-type Row int8
-
 const (
 	X = 1
 	O = 0
@@ -60,11 +52,11 @@ func InitZobrist() [49][2]uint64 {
 
 var zobrist = InitZobrist()
 
-func (b *Board) Get(pos Position, player int8) bool {
-	return b.Bitboards[player]&(1<<pos) != 0
+func (b *Board) Get(pos uint8, turn int8) bool {
+	return b.Bitboards[turn]&(1<<pos) != 0
 }
 
-func (b *Board) Undo(col Column) {
+func (b *Board) Undo(col uint8) {
 	b.Turn ^= 1
 
 	b.Heights[col] -= 1
@@ -74,7 +66,7 @@ func (b *Board) Undo(col Column) {
 	b.Hash ^= zobrist[pos][b.Turn]
 }
 
-func (b *Board) Move(col Column) {
+func (b *Board) Move(col uint8) {
 	pos := b.Heights[col]
 	b.Bitboards[b.Turn] |= (1 << pos)
 
@@ -86,7 +78,7 @@ func (b *Board) Move(col Column) {
 
 func (b *Board) Load(s string) {
 	for char := range s {
-		b.Move(Column(util.ConvertCol(s[char])))
+		b.Move((util.ConvertCol(s[char])))
 	}
 }
 
@@ -96,10 +88,10 @@ func (b *Board) Reset() {
 	b.Turn = 1
 }
 
-func GetMoves(b *Board) []Column {
-	moves := make([]Column, 0, 7)
+func GetMoves(b *Board) []uint8 {
+	moves := make([]uint8, 0, 7)
 	// order center out with bias towards LHS
-	columns := []Column{3, 2, 4, 1, 5, 0, 6}
+	columns := []uint8{3, 2, 4, 1, 5, 0, 6}
 	for _, col := range columns {
 		if b.Heights[col] < b.Ceilings[col] {
 			moves = append(moves, col)
@@ -116,7 +108,7 @@ func Print(b *Board) {
 		fmt.Printf("\n|%d|: ", r+1)
 
 		for c := range 7 {
-			pos := Position(c*7 + r)
+			pos := uint8(c*7 + r)
 
 			fmt.Printf("|")
 			if b.Get(pos, 1) {

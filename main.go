@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/eli-rich/goc4/src/board"
+	"github.com/eli-rich/goc4/src/cache"
 	"github.com/eli-rich/goc4/src/engine"
 	"github.com/eli-rich/goc4/src/util"
 )
@@ -22,9 +23,19 @@ func main() {
 	b := &board.Board{}
 	if len(os.Args) > 1 {
 		b.Init(1)
-		depth, _ := strconv.Atoi(os.Args[1])
+		timeLimit, _ := strconv.Atoi(os.Args[1])
 		b.Load(os.Args[2])
-		cmove := engine.Root(b, float64(depth))
+
+		table := cache.NewTable(1 << 25) // 2^25 * 16 == 536MB RAM
+		nodeCount := uint64(0)
+		searchCtx := &engine.SearchContext{
+			Table:      table,
+			Nodes:      &nodeCount,
+			TimeLimit:  float64(timeLimit),
+			DepthLimit: 0,
+		}
+
+		cmove := engine.Root(b, searchCtx)
 		fmt.Println(string(util.ConvertColBack(int(cmove))))
 		os.Exit(0)
 	}
@@ -43,14 +54,24 @@ func main() {
 	}
 	fmt.Print("Enter a search time. The computer will use ABOUT this many seconds. Recommended: (5-20): ")
 	fmt.Scanf("%d", &options.seconds)
-	gameLoop(b, options)
+
+	table := cache.NewTable(1 << 25)
+	nodeCount := uint64(0)
+	searchCtx := &engine.SearchContext{
+		Table:      table,
+		Nodes:      &nodeCount,
+		TimeLimit:  float64(options.seconds),
+		DepthLimit: 0,
+	}
+
+	gameLoop(b, searchCtx, options)
 }
 
-func gameLoop(b *board.Board, options Options) {
+func gameLoop(b *board.Board, searchCtx *engine.SearchContext, options Options) {
 	if !options.first {
 		b.Init(1)
 		cmove := byte('d')
-		b.Move(board.Column(util.ConvertCol(cmove)))
+		b.Move((util.ConvertCol(cmove)))
 		fmt.Printf("Computer move: %c\n", rune(cmove))
 	} else {
 		b.Init(0)
@@ -58,16 +79,16 @@ func gameLoop(b *board.Board, options Options) {
 	for {
 		board.Print(b)
 		move := getMoveInput()
-		b.Move(board.Column(util.ConvertCol(move)))
+		b.Move(util.ConvertCol(move))
 		checkGameOver(b, options)
-		cmove := engine.Root(b, float64(options.seconds))
+		cmove := engine.Root(b, searchCtx)
 		b.Move(cmove)
 		fmt.Printf("Computer move: %c\n", rune(util.ConvertColBack(int(cmove))))
 		checkGameOver(b, options)
 	}
 }
 
-func getMoveInput() board.SquareCol {
+func getMoveInput() byte {
 	moveInput := ask("Enter a move: ")
 	moveInput = strings.ToUpper(moveInput)
 	return moveInput[0]
