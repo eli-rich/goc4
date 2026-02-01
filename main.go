@@ -35,8 +35,8 @@ func main() {
 			DepthLimit: 0,
 		}
 
-		cmove := engine.Root(b, searchCtx)
-		fmt.Println(string(util.ConvertColBack(int(cmove))))
+		cmove, _, _ := engine.Root(b, searchCtx)
+		fmt.Println(string(util.ConvertColBack(cmove)))
 		os.Exit(0)
 	}
 	options := Options{first: true, seconds: 12}
@@ -68,22 +68,20 @@ func main() {
 }
 
 func gameLoop(b *board.Board, searchCtx *engine.SearchContext, options Options) {
+	b.Init(1)
 	if !options.first {
-		b.Init(1)
 		cmove := byte('d')
 		b.Move((util.ConvertCol(cmove)))
 		fmt.Printf("Computer move: %c\n", rune(cmove))
-	} else {
-		b.Init(0)
 	}
 	for {
 		board.Print(b)
 		move := getMoveInput()
 		b.Move(util.ConvertCol(move))
 		checkGameOver(b, options)
-		cmove := engine.Root(b, searchCtx)
+		cmove, _, cdepth := engine.Root(b, searchCtx)
 		b.Move(cmove)
-		fmt.Printf("Computer move: %c\n", rune(util.ConvertColBack(int(cmove))))
+		fmt.Printf("Computer move: %c\nEngine depth: %d\n", util.ConvertColBack(cmove), cdepth)
 		checkGameOver(b, options)
 	}
 }

@@ -20,23 +20,18 @@ type SearchContext struct {
 	DepthLimit uint8
 }
 
-// var table = cache.NewTable(33554432) // 2^25 === 416MB RAM (Assuming 16 bytes per entry)
-// var nodes uint64 = 0
-
 // Use a Score large enough to distinguish ply, but small enough to not overflow int
 const WIN_SCORE int16 = 10000
 const maxDepth uint8 = 43 // board filled
 
-func Root(b *board.Board, ctx *SearchContext) uint8 {
-	var bestMove uint8
-
+func Root(b *board.Board, ctx *SearchContext) (bestMove uint8, bestScore int16, depth uint8) {
 	ctx.StartTime = time.Now()
 	*ctx.Nodes = 0
 
 	// invalidate stale entries
 	ctx.Table.Generation++
 
-	for depth := uint8(8); depth <= maxDepth; depth++ {
+	for depth = 8; depth <= maxDepth; depth++ {
 		if ctx.DepthLimit > 0 && depth > ctx.DepthLimit {
 			break
 		}
@@ -45,7 +40,9 @@ func Root(b *board.Board, ctx *SearchContext) uint8 {
 
 		if completed {
 			bestMove = move
-			fmt.Printf("Depth: %d, Move: %s, Score: %d, Nodes: %d\n", depth, string(util.ConvertColBack(int(move))), score, *ctx.Nodes)
+			if DEBUG {
+				fmt.Printf("Depth: %d, Move: %s, Score: %d, Nodes: %d\n", depth, string(util.ConvertColBack(move)), score, *ctx.Nodes)
+			}
 
 			if score > WIN_SCORE-100 {
 				break
@@ -54,10 +51,12 @@ func Root(b *board.Board, ctx *SearchContext) uint8 {
 			break
 		}
 	}
+	if DEBUG {
+		fmt.Printf("Total Nodes: %d\n", *ctx.Nodes)
+		fmt.Printf("Time: %.2fs\n", time.Since(ctx.StartTime).Seconds())
+	}
 
-	fmt.Printf("Total Nodes: %d\n", *ctx.Nodes)
-	fmt.Printf("Time: %.2fs\n", time.Since(ctx.StartTime).Seconds())
-	return bestMove
+	return bestMove, bestScore, depth
 }
 
 func RootSearch(b *board.Board, ctx *SearchContext, depth uint8) (uint8, int16, bool) {

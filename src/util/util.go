@@ -11,7 +11,7 @@ func ConvertRow(row_square byte) uint8 {
 	return 5 - (row_square - '1')
 }
 
-func ConvertColBack(col_index int) byte {
+func ConvertColBack(col_index uint8) byte {
 	return byte(col_index + 'A')
 }
 
