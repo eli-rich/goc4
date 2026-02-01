@@ -8,16 +8,20 @@ import (
 	"strings"
 
 	"github.com/eli-rich/goc4/src/board"
+	"github.com/eli-rich/goc4/src/book"
 	"github.com/eli-rich/goc4/src/cache"
 	"github.com/eli-rich/goc4/src/engine"
 	"github.com/eli-rich/goc4/src/util"
 )
 
+var DEBUG bool = os.Getenv("GOC4_DEBUG") == "1"
+
 func printUsage(argv0 string) {
 	fmt.Printf("Usage: %s [options] [history]\n", argv0)
 	fmt.Println("\nOptions:")
-	fmt.Println("  -t   - Set and use time limit for search (in seconds)")
-	fmt.Println("  -d   - Set and use depth limit for search")
+	fmt.Println("  -time    - Set and use time limit for search (in seconds)")
+	fmt.Println("  -depth   - Set and use depth limit for search")
+	fmt.Println("  -book    - File path for opening book")
 	fmt.Println("  Must use at least one when providing move history")
 	fmt.Println("\nHistory: a string of moves to load before computing engine move")
 	fmt.Println("  Example: \"DDCBD\"")
@@ -33,14 +37,26 @@ func main() {
 
 	var timeLimit float64
 	var depthLimit uint
+	var bookPath string
+	var bookMaxPly uint
 
 	flag.UintVar(&depthLimit, "depth", 0, "ply + depth limit for engine (0 = use time limit instead)")
 	flag.Float64Var(&timeLimit, "time", 0, "time limit for engine (0 = use depth limit instead")
+	flag.StringVar(&bookPath, "book", "", "path to opening book")
+	flag.UintVar(&bookMaxPly, "bp", 0, "max ply for book")
 	flag.Parse()
 
 	if timeLimit == 0 && depthLimit == 0 && len(flag.Args()) != 0 {
 		printUsage(os.Args[0])
 		panic("must set one flag to determine search type")
+	}
+
+	if bookPath != "" && bookMaxPly != 0 {
+		_, err := book.LoadBin(bookPath, uint8(bookMaxPly))
+		if err != nil {
+			fmt.Printf("Error reading book %s: %v\n", bookPath, err)
+			return
+		}
 	}
 
 	b := &board.Board{}
@@ -96,7 +112,7 @@ func interactive(b *board.Board, table *cache.Table) {
 
 	if useTime {
 		fmt.Print("Enter a search time. The computer will use ABOUT this many seconds. Recommended: (5-20): ")
-		fmt.Scanf("%d\n", &searchContext.TimeLimit)
+		fmt.Scanf("%f\n", &searchContext.TimeLimit)
 	} else {
 		fmt.Print("Enter a search depth. The computer will search until <current depth + this number>. Recommended: (4-12): ")
 		fmt.Scanf("%d\n", &searchContext.DepthLimit)

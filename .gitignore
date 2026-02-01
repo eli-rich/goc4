@@ -1,11 +1,13 @@
 linux/
 macos/
 connect4
+goc4
 c4.prof
 logs
 c4golin
 .DS_Store
 coverage.out
+*.c4book
 
 node_modules
 # output

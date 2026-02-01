@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/eli-rich/goc4/src/board"
+	"github.com/eli-rich/goc4/src/book"
 	"github.com/eli-rich/goc4/src/cache"
 	"github.com/eli-rich/goc4/src/util"
 )
@@ -26,6 +27,9 @@ const WIN_SCORE int16 = 10000
 const MAX_DEPTH uint8 = 43 // board filled
 
 func Root(b *board.Board, ctx *SearchContext) (bestMove uint8, bestScore int16, depth uint8) {
+	if entry, found := book.Probe(b); found {
+		return entry.BestMove, entry.Score, entry.Depth
+	}
 	ctx.StartTime = time.Now()
 	*ctx.Nodes = 0
 
