@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,21 +13,42 @@ import (
 	"github.com/eli-rich/goc4/src/util"
 )
 
-type Options struct {
-	first   bool
-	seconds int
+func printUsage(argv0 string) {
+	fmt.Printf("Usage: %s [options] [history]\n", argv0)
+	fmt.Println("\nOptions:")
+	fmt.Println("  -t   - Set and use time limit for search (in seconds)")
+	fmt.Println("  -d   - Set and use depth limit for search")
+	fmt.Println("  Must use at least one when providing move history")
+	fmt.Println("\nHistory: a string of moves to load before computing engine move")
+	fmt.Println("  Example: \"DDCBD\"")
+	fmt.Println("    D = center column (4)")
+	fmt.Println("    C = center-left column (3)")
+	fmt.Print("    B = left-center column (2)\n\n")
+
 }
 
 func main() {
 	board.GenerateMasks()
+	table := cache.NewTable(1 << 25) // 2^25 * 16 == 536MB RAM
+
+	var timeLimit float64
+	var depthLimit uint
+
+	flag.UintVar(&depthLimit, "depth", 0, "ply + depth limit for engine (0 = use time limit instead)")
+	flag.Float64Var(&timeLimit, "time", 0, "time limit for engine (0 = use depth limit instead")
+	flag.Parse()
+
+	if timeLimit == 0 && depthLimit == 0 && len(flag.Args()) != 0 {
+		printUsage(os.Args[0])
+		panic("must set one flag to determine search type")
+	}
 
 	b := &board.Board{}
-	if len(os.Args) > 1 {
-		b.Init(1)
+	b.Init(1)
+	if len(flag.Args()) > 0 {
 		timeLimit, _ := strconv.Atoi(os.Args[1])
 		b.Load(os.Args[2])
 
-		table := cache.NewTable(1 << 25) // 2^25 * 16 == 536MB RAM
 		nodeCount := uint64(0)
 		searchCtx := &engine.SearchContext{
 			Table:      table,
@@ -37,52 +59,89 @@ func main() {
 
 		cmove, _, _ := engine.Root(b, searchCtx)
 		fmt.Println(string(util.ConvertColBack(cmove)))
-		os.Exit(0)
+		return
 	}
-	options := Options{first: true, seconds: 12}
+
+	interactive(b, table)
+}
+
+func interactive(b *board.Board, table *cache.Table) {
 	fmt.Println("Welcome to Connect 4!")
 	fmt.Println("Enter a move in the form of a letter (A-G) to place a piece in that column.")
-	fmt.Println("The first player to get 4 pieces in a row wins!")
-	fmt.Println()
-	gofirstInput := ask("Would you like to go first? (Y/N): ")
-	gofirstInput = strings.ToUpper(gofirstInput)
-	switch gofirstInput {
-	case "Y":
-		options.first = true
-	case "N":
-		options.first = false
-	}
-	fmt.Print("Enter a search time. The computer will use ABOUT this many seconds. Recommended: (5-20): ")
-	fmt.Scanf("%d", &options.seconds)
+	fmt.Print("The first player to get 4 pieces in a row wins!\n\n")
 
-	table := cache.NewTable(1 << 25)
+	playerFirstInput := ask("Would you like to go first? (Y/n): ")
+	playerFirstInput = strings.ToUpper(playerFirstInput)
+	playerFirst := true
+
+	if playerFirstInput == "N" {
+		playerFirst = false
+	}
+
+	timeOrDepthInput := ask("Do you want the engine to use time or depth to search? (T/d): ")
+	timeOrDepthInput = strings.ToUpper(timeOrDepthInput)
+	useTime := true
+
+	if timeOrDepthInput == "D" {
+		useTime = false
+	}
+
 	nodeCount := uint64(0)
-	searchCtx := &engine.SearchContext{
+	searchContext := &engine.SearchContext{
 		Table:      table,
 		Nodes:      &nodeCount,
-		TimeLimit:  float64(options.seconds),
+		TimeLimit:  0,
 		DepthLimit: 0,
 	}
 
-	gameLoop(b, searchCtx, options)
+	if useTime {
+		fmt.Print("Enter a search time. The computer will use ABOUT this many seconds. Recommended: (5-20): ")
+		fmt.Scanf("%d\n", &searchContext.TimeLimit)
+	} else {
+		fmt.Print("Enter a search depth. The computer will search until <current depth + this number>. Recommended: (4-12): ")
+		fmt.Scanf("%d\n", &searchContext.DepthLimit)
+	}
+
+	fmt.Printf("TimeLimit: %f, DepthLimit: %d\n", searchContext.TimeLimit, searchContext.DepthLimit)
+
+	gameLoop(b, searchContext, playerFirst)
 }
 
-func gameLoop(b *board.Board, searchCtx *engine.SearchContext, options Options) {
-	b.Init(1)
-	if !options.first {
+func gameLoop(b *board.Board, searchCtx *engine.SearchContext, playerFirst bool) {
+	if !playerFirst { // computer always plays column D first
 		cmove := byte('d')
 		b.Move((util.ConvertCol(cmove)))
-		fmt.Printf("Computer move: %c\n", rune(cmove))
+		fmt.Printf("Computer move: %c\n", cmove)
 	}
 	for {
 		board.Print(b)
+
 		move := getMoveInput()
 		b.Move(util.ConvertCol(move))
-		checkGameOver(b, options)
+
+		if board.CheckDraw(b) {
+			fmt.Println("Draw!")
+			board.Print(b)
+			return
+		} else if board.CheckAlign(b.Bitboards[0]) || board.CheckAlign(b.Bitboards[1]) {
+			fmt.Println("You win!")
+			board.Print(b)
+			return
+		}
+
 		cmove, _, cdepth := engine.Root(b, searchCtx)
 		b.Move(cmove)
 		fmt.Printf("Computer move: %c\nEngine depth: %d\n", util.ConvertColBack(cmove), cdepth)
-		checkGameOver(b, options)
+
+		if board.CheckDraw(b) {
+			fmt.Println("Draw!")
+			board.Print(b)
+			return
+		} else if board.CheckAlign(b.Bitboards[0]) || board.CheckAlign(b.Bitboards[1]) {
+			fmt.Println("You lose!")
+			board.Print(b)
+			return
+		}
 	}
 }
 
@@ -97,29 +156,4 @@ func ask(question string) string {
 	fmt.Print(question)
 	fmt.Scanln(&input)
 	return input
-}
-
-func checkGameOver(b *board.Board, options Options) {
-	var winner int8 = engine.CheckWinner(b)
-	if board.CheckDraw(b) {
-		winner = 2
-	}
-	if winner == -1 {
-		return
-	}
-	board.Print(b)
-	var player int8
-	if options.first {
-		player = 1
-	} else {
-		player = 0
-	}
-	if winner == player {
-		fmt.Println("You win!")
-	} else if winner != player {
-		fmt.Println("You lose!")
-	} else {
-		fmt.Println("Draw!")
-	}
-	os.Exit(0)
 }

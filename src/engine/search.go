@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math/bits"
 	"os"
 	"time"
 
@@ -22,7 +23,7 @@ type SearchContext struct {
 
 // Use a Score large enough to distinguish ply, but small enough to not overflow int
 const WIN_SCORE int16 = 10000
-const maxDepth uint8 = 43 // board filled
+const MAX_DEPTH uint8 = 43 // board filled
 
 func Root(b *board.Board, ctx *SearchContext) (bestMove uint8, bestScore int16, depth uint8) {
 	ctx.StartTime = time.Now()
@@ -31,8 +32,11 @@ func Root(b *board.Board, ctx *SearchContext) (bestMove uint8, bestScore int16, 
 	// invalidate stale entries
 	ctx.Table.Generation++
 
-	for depth = 8; depth <= maxDepth; depth++ {
-		if ctx.DepthLimit > 0 && depth > ctx.DepthLimit {
+	for depth = 8; depth <= MAX_DEPTH; depth++ {
+		turns := bits.OnesCount64(uint64(b.Bitboards[0] | b.Bitboards[1]))
+		limit := (8 + ctx.DepthLimit) + uint8(turns/2)
+		if ctx.DepthLimit > 0 && depth > limit {
+			depth--
 			break
 		}
 
