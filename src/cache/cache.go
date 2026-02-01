@@ -31,3 +31,8 @@ func NewTable(length uint64) *Table {
 		Generation: 0,
 	}
 }
+
+func FlushTable(t *Table) {
+	clear(t.Entries)
+	t.Generation = 0
+}
