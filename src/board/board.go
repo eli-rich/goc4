@@ -42,9 +42,10 @@ func (b *Board) Init(turn int8) {
 // init a zobrist hash table
 func InitZobrist() [49][2]uint64 {
 	var zobrist [49][2]uint64
-	for i := range 49 { // Loop to < 49
+	rng := rand.New(rand.NewSource(20020)) // TODO: change to 4444
+	for i := range 49 {
 		for j := range 2 {
-			zobrist[i][j] = uint64(rand.Int63())
+			zobrist[i][j] = uint64(rng.Int63())
 		}
 	}
 	return zobrist
